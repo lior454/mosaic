@@ -91,6 +91,20 @@ router.get('/join/:code', requireAuth, async (req: AuthRequest, res: Response) =
   }
 });
 
+router.get('/:id', requireAuth, async (req: AuthRequest, res: Response) => {
+  try {
+    const [event] = await query(
+      'SELECT * FROM events WHERE id = $1 AND owner_id = $2',
+      [req.params.id, req.dbUserId]
+    );
+    if (!event) return res.status(404).json({ error: 'Event not found' });
+    return res.json(event);
+  } catch (err) {
+    console.error('GET /events/:id error:', err);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 router.post('/:id/join', requireAuth, async (req: AuthRequest, res: Response) => {
   try {
     const [event] = await query('SELECT * FROM events WHERE id = $1', [req.params.id]);
