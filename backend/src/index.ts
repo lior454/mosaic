@@ -7,6 +7,7 @@ import webhookRoutes from './routes/webhooks';
 import eventRoutes from './routes/events';
 import mediaRoutes from './routes/media';
 import exportRoutes from './routes/export';
+import editRoutes from './routes/edit';
 // Workers — import to start them
 import './workers/auto-generate';
 import './workers/export';
@@ -29,6 +30,7 @@ app.use(limiter as unknown as express.RequestHandler);
 app.use('/api/events', eventRoutes);
 app.use('/api/media', mediaRoutes);
 app.use('/api/export', exportRoutes);
+app.use('/api/edit', editRoutes);
 
 app.get('/health', (_req, res) => res.json({ ok: true }));
 
