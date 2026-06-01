@@ -5,6 +5,7 @@ import rateLimit from 'express-rate-limit';
 import dotenv from 'dotenv';
 import webhookRoutes from './routes/webhooks';
 import eventRoutes from './routes/events';
+import mediaRoutes from './routes/media';
 
 dotenv.config();
 
@@ -22,6 +23,7 @@ const limiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 100 });
 app.use(limiter as unknown as express.RequestHandler);
 
 app.use('/api/events', eventRoutes);
+app.use('/api/media', mediaRoutes);
 
 app.get('/health', (_req, res) => res.json({ ok: true }));
 
