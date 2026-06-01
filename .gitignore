@@ -1,8 +1,14 @@
 node_modules/
 .env
 .env.local
+.env*.local
 dist/
 build/
+out/
 .expo/
 *.log
 .next/
+*.tsbuildinfo
+coverage/
+.DS_Store
+Thumbs.db
