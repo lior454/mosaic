@@ -18,6 +18,6 @@ app.use(limiter as unknown as express.RequestHandler);
 
 app.get('/health', (_req, res) => res.json({ ok: true }));
 
-app.listen(PORT, () => console.log(`Backend running on port ${PORT}`));
+app.listen(Number(PORT), '0.0.0.0', () => console.log(`Backend running on port ${PORT}`));
 
 export default app;
