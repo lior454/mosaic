@@ -63,15 +63,19 @@ new Worker(
       used.add(item.id);
     }
 
-    await query(
-      `INSERT INTO edit_projects (event_id, timeline_json, auto_generated)
-       VALUES ($1, $2, true)
-       ON CONFLICT (event_id) DO UPDATE
-       SET timeline_json = $2, auto_generated = true, updated_at = NOW()`,
-      [event_id, JSON.stringify({ clips })]
-    );
-
-    console.log(`Auto-generated timeline for event ${event_id}: ${clips.length} clips`);
+    try {
+      await query(
+        `INSERT INTO edit_projects (event_id, timeline_json, auto_generated)
+         VALUES ($1, $2, true)
+         ON CONFLICT (event_id) DO UPDATE
+         SET timeline_json = $2, auto_generated = true, updated_at = NOW()`,
+        [event_id, JSON.stringify({ clips })]
+      );
+      console.log(`Auto-generated timeline for event ${event_id}: ${clips.length} clips`);
+    } catch (err) {
+      console.error(`Auto-generate failed for event ${event_id}:`, err);
+      throw err;
+    }
   },
   { connection }
 );
