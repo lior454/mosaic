@@ -28,6 +28,7 @@ export default function Dashboard() {
   const { getToken } = useAuth();
   const [events, setEvents] = useState<Event[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
 
   useEffect(() => {
     (async () => {
@@ -39,6 +40,7 @@ export default function Dashboard() {
         setEvents(res.data);
       } catch (err) {
         console.error('Failed to load events', err);
+        setError('לא ניתן לטעון את האירועים. בדוק את החיבור לשרת.');
       } finally {
         setLoading(false);
       }
@@ -56,6 +58,12 @@ export default function Dashboard() {
           + אירוע חדש
         </Link>
       </div>
+
+      {error && (
+        <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
+          {error}
+        </div>
+      )}
 
       {loading ? (
         <p className="text-gray-400 text-center py-20">טוען...</p>
