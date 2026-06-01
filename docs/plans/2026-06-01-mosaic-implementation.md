@@ -4,9 +4,155 @@
 
 **Goal:** Build Mosaic — a multi-angle event video sharing platform where guests upload media from their phones and event owners edit a final video from multiple angles on a web dashboard.
 
-**Architecture:** Three separate packages in a monorepo: `backend` (Node.js/Express/PostgreSQL), `web` (Next.js dashboard for event owners), `mobile` (React Native/Expo for participants). Media flows directly from phone → Cloudflare R2 via signed URLs. Backend stores only metadata. FFmpeg renders the final video server-side from a `timeline_json` descriptor.
+**Architecture:** Three separate packages in a monorepo: `backend` (Node.js/Express/PostgreSQL), `web` (Next.js dashboard for event owners), `mobile` (React Native/Expo for participants). Everything runs via Docker Compose locally for development/testing. Media stored in Cloudflare R2. FFmpeg renders final video server-side from a `timeline_json` descriptor.
 
-**Tech Stack:** Node.js + Express + PostgreSQL (Neon) + BullMQ (Upstash Redis) + Cloudflare R2 + FFmpeg + Next.js + TailwindCSS + React Native + Expo + Clerk (auth)
+**Tech Stack:** Node.js + Express + PostgreSQL + Redis + FFmpeg + Next.js + TailwindCSS + React Native + Expo + Clerk (auth) + Docker Compose + Cloudflare R2
+
+**Dev setup:** Docker Compose on local machine, mobile connects via `http://192.168.X.X:3001` over WiFi.
+**Production (later):** Hetzner VPS + Docker Compose + Caddy (auto SSL) + hardening.
+
+---
+
+## Task 0: Docker Compose Setup
+
+**Files:**
+- Create: `docker-compose.yml`
+- Create: `backend/Dockerfile`
+- Create: `web/Dockerfile`
+
+**Step 1: Create docker-compose.yml**
+
+```yaml
+version: '3.9'
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: mosaic
+      POSTGRES_USER: mosaic
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    volumes:
+      - redis_data:/data
+    ports:
+      - "6379:6379"
+
+  backend:
+    build: ./backend
+    restart: unless-stopped
+    ports:
+      - "3001:3001"
+    environment:
+      DATABASE_URL: postgresql://mosaic:${POSTGRES_PASSWORD}@postgres:5432/mosaic
+      REDIS_URL: redis://redis:6379
+      CLERK_SECRET_KEY: ${CLERK_SECRET_KEY}
+      CLERK_WEBHOOK_SECRET: ${CLERK_WEBHOOK_SECRET}
+      R2_ACCOUNT_ID: ${R2_ACCOUNT_ID}
+      R2_ACCESS_KEY_ID: ${R2_ACCESS_KEY_ID}
+      R2_SECRET_ACCESS_KEY: ${R2_SECRET_ACCESS_KEY}
+      R2_BUCKET_NAME: ${R2_BUCKET_NAME}
+      FRONTEND_URL: ${FRONTEND_URL}
+      PORT: 3001
+    depends_on:
+      - postgres
+      - redis
+
+  web:
+    build: ./web
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: ${NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY}
+      CLERK_SECRET_KEY: ${CLERK_SECRET_KEY}
+      NEXT_PUBLIC_BACKEND_URL: ${NEXT_PUBLIC_BACKEND_URL}
+      NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_APP_URL}
+    depends_on:
+      - backend
+
+volumes:
+  postgres_data:
+  redis_data:
+```
+
+**Step 2: Create backend/Dockerfile**
+
+```dockerfile
+FROM node:20-alpine
+
+# FFmpeg for video processing
+RUN apk add --no-cache ffmpeg
+
+WORKDIR /app
+COPY package*.json ./
+RUN npm ci --only=production
+COPY . .
+RUN npm run build
+
+EXPOSE 3001
+CMD ["node", "dist/index.js"]
+```
+
+**Step 3: Create web/Dockerfile**
+
+```dockerfile
+FROM node:20-alpine AS builder
+WORKDIR /app
+COPY package*.json ./
+RUN npm ci
+COPY . .
+RUN npm run build
+
+FROM node:20-alpine AS runner
+WORKDIR /app
+ENV NODE_ENV production
+COPY --from=builder /app/.next/standalone ./
+COPY --from=builder /app/.next/static ./.next/static
+COPY --from=builder /app/public ./public
+
+EXPOSE 3000
+CMD ["node", "server.js"]
+```
+
+**Step 4: Create .env (local, never commit)**
+
+```bash
+POSTGRES_PASSWORD=supersecret_local
+CLERK_SECRET_KEY=sk_test_...
+CLERK_WEBHOOK_SECRET=whsec_...
+NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=pk_test_...
+R2_ACCOUNT_ID=
+R2_ACCESS_KEY_ID=
+R2_SECRET_ACCESS_KEY=
+R2_BUCKET_NAME=mosaic-media
+# Replace with your local IP (run `ipconfig` on Windows)
+NEXT_PUBLIC_BACKEND_URL=http://192.168.1.X:3001
+NEXT_PUBLIC_APP_URL=http://192.168.1.X:3000
+FRONTEND_URL=http://192.168.1.X:3000
+```
+
+**Step 5: Verify Docker works**
+
+```bash
+docker compose up --build
+```
+Expected: postgres, redis, backend, web all running. Visit `http://localhost:3000`.
+
+**Step 6: Commit**
+
+```bash
+git add docker-compose.yml backend/Dockerfile web/Dockerfile
+git commit -m "feat: Docker Compose setup with postgres, redis, backend, web"
+```
 
 ---
 
@@ -1833,7 +1979,80 @@ EXPO_PUBLIC_BACKEND_URL=http://localhost:3001
 ```
 
 **Required external services to set up:**
-1. [Neon](https://neon.tech) — free PostgreSQL
-2. [Cloudflare R2](https://dash.cloudflare.com) — free storage tier
-3. [Upstash](https://upstash.com) — free Redis
-4. [Clerk](https://clerk.com) — free auth (configure Google + Apple login)
+1. [Cloudflare R2](https://dash.cloudflare.com) — free storage tier (media only)
+2. [Clerk](https://clerk.com) — free auth (configure Google + Apple login)
+
+PostgreSQL and Redis run inside Docker — no external service needed.
+
+---
+
+## Production Deployment (After Testing)
+
+When ready to go live, follow these steps:
+
+### 1. Provision a Hetzner VPS
+- Go to [hetzner.com](https://hetzner.com) → Cloud → Create Server
+- Pick: **CX21** (2 vCPU, 4GB RAM, €5.77/mo) or **CX31** (2 vCPU, 8GB RAM, €11/mo) for heavier FFmpeg load
+- OS: Ubuntu 22.04
+- Add your SSH key
+
+### 2. Install Docker on the server
+```bash
+ssh root@YOUR_SERVER_IP
+apt update && apt install -y docker.io docker-compose-plugin
+```
+
+### 3. Point your domain to the server
+Add DNS A records:
+```
+api.yourdomain.com  → SERVER_IP
+app.yourdomain.com  → SERVER_IP
+```
+
+### 4. Add Caddy for SSL (replaces nginx, handles Let's Encrypt automatically)
+Add to `docker-compose.yml`:
+```yaml
+caddy:
+  image: caddy:2-alpine
+  restart: unless-stopped
+  ports:
+    - "80:80"
+    - "443:443"
+  volumes:
+    - ./Caddyfile:/etc/caddy/Caddyfile
+    - caddy_data:/data
+  depends_on:
+    - backend
+    - web
+```
+
+Create `Caddyfile`:
+```
+api.yourdomain.com {
+  reverse_proxy backend:3001
+}
+
+app.yourdomain.com {
+  reverse_proxy web:3000
+}
+```
+
+### 5. Production .env hardening checklist
+- [ ] `POSTGRES_PASSWORD` — long random string (use `openssl rand -base64 32`)
+- [ ] All secrets rotated from dev values
+- [ ] Clerk webhook pointing to `https://api.yourdomain.com/webhooks/clerk`
+- [ ] R2 CORS policy set to allow only `https://app.yourdomain.com`
+- [ ] `FRONTEND_URL` updated to production domain
+- [ ] Firewall: only ports 80, 443, 22 open (`ufw allow 80 443 22`)
+
+### 6. Deploy
+```bash
+git pull origin master
+docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+```
+
+### 7. Backups
+```bash
+# Daily postgres backup to R2
+docker exec mosaic-postgres pg_dump -U mosaic mosaic | gzip > backup-$(date +%F).sql.gz
+```
