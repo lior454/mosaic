@@ -8,6 +8,7 @@ import Link from 'next/link';
 export default function EditorPage({ params }: { params: { id: string } }) {
   const { getToken } = useAuth();
   const [clips, setClips] = useState<Clip[]>([]);
+  const [mediaMap, setMediaMap] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [exporting, setExporting] = useState(false);
@@ -25,13 +26,14 @@ export default function EditorPage({ params }: { params: { id: string } }) {
           api.get(`/api/media/event/${params.id}`, { headers }),
         ]);
 
-        const mediaMap = Object.fromEntries(
+        const map = Object.fromEntries(
           (mediaRes.data as { id: string; download_url: string }[]).map((m) => [m.id, m.download_url])
         );
+        setMediaMap(map);
 
         const clipsWithUrls: Clip[] = (projectRes.data.timeline_json.clips as Clip[]).map((c) => ({
           ...c,
-          download_url: mediaMap[c.media_item_id],
+          download_url: map[c.media_item_id],
         }));
 
         setClips(clipsWithUrls);
@@ -48,7 +50,6 @@ export default function EditorPage({ params }: { params: { id: string } }) {
     setClips((prev) =>
       prev.map((c, i) => {
         if (i !== index) return c;
-        // Swap current clip with the chosen alternative
         const chosenAlt = c.alternatives.find((a) => a.media_item_id === newMediaId);
         if (!chosenAlt) return c;
         return {
@@ -59,7 +60,7 @@ export default function EditorPage({ params }: { params: { id: string } }) {
             ...c.alternatives.filter((a) => a.media_item_id !== newMediaId),
             { media_item_id: c.media_item_id, synced_timestamp: c.synced_timestamp },
           ],
-          download_url: undefined, // will need to re-fetch or pass mediaMap
+          download_url: mediaMap[newMediaId],
         };
       })
     );
@@ -76,6 +77,7 @@ export default function EditorPage({ params }: { params: { id: string } }) {
       );
     } catch (err) {
       console.error(err);
+      setError('שגיאה בשמירה. נסה שוב.');
     } finally {
       setSaving(false);
     }
