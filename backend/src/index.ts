@@ -6,6 +6,10 @@ import dotenv from 'dotenv';
 import webhookRoutes from './routes/webhooks';
 import eventRoutes from './routes/events';
 import mediaRoutes from './routes/media';
+import exportRoutes from './routes/export';
+// Workers — import to start them
+import './workers/auto-generate';
+import './workers/export';
 
 dotenv.config();
 
@@ -24,6 +28,7 @@ app.use(limiter as unknown as express.RequestHandler);
 
 app.use('/api/events', eventRoutes);
 app.use('/api/media', mediaRoutes);
+app.use('/api/export', exportRoutes);
 
 app.get('/health', (_req, res) => res.json({ ok: true }));
 
