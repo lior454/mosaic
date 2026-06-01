@@ -18,7 +18,7 @@ router.post('/clerk', async (req: Request, res: Response) => {
   };
 
   try {
-    event = wh.verify(JSON.stringify(req.body), {
+    event = wh.verify(req.body as Buffer, {
       'svix-id': req.headers['svix-id'] as string,
       'svix-timestamp': req.headers['svix-timestamp'] as string,
       'svix-signature': req.headers['svix-signature'] as string,
