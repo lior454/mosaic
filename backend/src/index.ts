@@ -4,6 +4,7 @@ import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
 import dotenv from 'dotenv';
 import webhookRoutes from './routes/webhooks';
+import eventRoutes from './routes/events';
 
 dotenv.config();
 
@@ -19,6 +20,8 @@ app.use('/webhooks', express.raw({ type: 'application/json' }), webhookRoutes);
 app.use(express.json({ limit: '10kb' }));
 const limiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 100 });
 app.use(limiter as unknown as express.RequestHandler);
+
+app.use('/api/events', eventRoutes);
 
 app.get('/health', (_req, res) => res.json({ ok: true }));
 
